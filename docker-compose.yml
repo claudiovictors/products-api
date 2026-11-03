@@ -1,0 +1,41 @@
+services:
+  # MySQL database. The schema in schema.sql is executed automatically the
+  # first time the volume is created.
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: Root@123
+      MYSQL_DATABASE: products
+    ports:
+      # Published on 3307 (not 3306) to avoid clashing with a local MySQL.
+      # The API does not use this mapping; it reaches the database through the
+      # internal Compose network using the host name "db".
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pRoot@123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # The Go API. It connects to the "db" service using the container network
+  # name as the host (DB_ADDRESS below).
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DB_ADDRESS: db:3306
+      DB_USER: root
+      DB_PASSWORD: Root@123
+      DB_NAME: products
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
